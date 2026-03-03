@@ -10,6 +10,8 @@ readonly PORT_MAX=39999
 readonly MAX_PORT_ATTEMPTS=25
 readonly FIREWALL_ZONE="trusted"
 readonly SMOKE_TEST_SIZE_THRESHOLD=10240
+readonly SERVICE_HEALTH_ATTEMPTS=90
+readonly SERVICE_HEALTH_SLEEP=2
 
 log() {
   local level="$1"
@@ -220,13 +222,13 @@ start_stack() {
 wait_for_service() {
   local port="$1"
   local token="$2"
-  local attempts=30
+  local attempts="${SERVICE_HEALTH_ATTEMPTS}"
 
   while (( attempts > 0 )); do
     if curl -fsS --max-time 5 "http://localhost:${port}/metrics?token=${token}" >/dev/null 2>&1; then
       return 0
     fi
-    sleep 2
+    sleep "${SERVICE_HEALTH_SLEEP}"
     (( attempts-- ))
   done
 
