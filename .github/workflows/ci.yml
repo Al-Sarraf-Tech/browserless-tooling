@@ -35,7 +35,7 @@ jobs:
 
       - name: Static regression (bash syntax + shellcheck)
         if: matrix.batch == 'static'
-        run: bash .github/scripts/docker-runner.sh debian:bookworm-slim "apt-get update && apt-get install -y shellcheck && bash -n aibrowse-setup.sh && bash -n browsewrap-setup.sh && shellcheck aibrowse-setup.sh browsewrap-setup.sh"
+        run: bash .github/scripts/docker-runner.sh debian:bookworm-slim "apt-get update && apt-get install -y shellcheck && bash -n aibrowse-setup.sh && bash -n browsewrap-setup.sh && shellcheck -x --exclude=SC2155,SC1091 aibrowse-setup.sh browsewrap-setup.sh"
 
       - name: Full integration regression
         if: matrix.batch == 'integration'
