@@ -1,5 +1,8 @@
 # Browserless Tooling
 
+[![Regression CI](https://github.com/jalsarraf0/browserless-tooling/actions/workflows/regression-security.yml/badge.svg)](https://github.com/jalsarraf0/browserless-tooling/actions/workflows/regression-security.yml)
+[![Security CI](https://github.com/jalsarraf0/browserless-tooling/actions/workflows/security.yml/badge.svg)](https://github.com/jalsarraf0/browserless-tooling/actions/workflows/security.yml)
+
 > Hardened provisioning for Browserless Chromium and LM Studio MCP wrappers,
 > engineered with security-first defaults, deterministic outputs, and bash you
 > can hand to an SRE.
