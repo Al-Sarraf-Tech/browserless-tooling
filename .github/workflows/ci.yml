@@ -22,24 +22,20 @@ jobs:
       max-parallel: 2
       matrix:
         batch: ["static", "integration"]
+    env:
+      DOCKER_RUNNER_CACHE: /tmp/docker-runner
+      DOCKER_RUNNER_PRUNE: "true"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install lint tooling
-        if: matrix.batch == 'static'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
+      - name: Initialize Docker runner cache
+        run: mkdir -p /tmp/docker-runner/{images,cache,artifacts}
 
       - name: Static regression (bash syntax + shellcheck)
         if: matrix.batch == 'static'
-        run: |
-          set -euo pipefail
-          bash -n aibrowse-setup.sh
-          bash -n browsewrap-setup.sh
-          shellcheck aibrowse-setup.sh browsewrap-setup.sh
+        run: bash .github/scripts/docker-runner.sh debian:bookworm-slim "apt-get update && apt-get install -y shellcheck && bash -n aibrowse-setup.sh && bash -n browsewrap-setup.sh && shellcheck aibrowse-setup.sh browsewrap-setup.sh"
 
       - name: Full integration regression
         if: matrix.batch == 'integration'
