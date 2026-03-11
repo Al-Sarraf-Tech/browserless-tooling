@@ -124,8 +124,9 @@ generate_env_files() {
   local port="$3"
   local token="$4"
 
-  install -m 0640 /dev/null "${instance_dir}/.env"
-  cat >"${instance_dir}/.env" <<EOF
+  local _env_tmp
+  _env_tmp="$(mktemp "${instance_dir}/.env.XXXXXX")"
+  cat >"${_env_tmp}" <<EOF
 BROWSERLESS_NAME=${name}
 BROWSERLESS_TOKEN=${token}
 BROWSERLESS_PORT=${port}
@@ -133,12 +134,17 @@ BROWSERLESS_BIND_ADDRESS=
 DOWNLOAD_DIR=${instance_dir}/downloads
 LOG_DIR=${instance_dir}/logs
 EOF
+  chmod 0640 "${_env_tmp}"
+  mv "${_env_tmp}" "${instance_dir}/.env"
 
-  install -m 0640 /dev/null "${instance_dir}/.compose.env"
-  cat >"${instance_dir}/.compose.env" <<EOF
+  local _compose_env_tmp
+  _compose_env_tmp="$(mktemp "${instance_dir}/.compose.env.XXXXXX")"
+  cat >"${_compose_env_tmp}" <<EOF
 COMPOSE_PROJECT_NAME=aibrowse-${name}
 BROWSERLESS_PORT=${port}
 EOF
+  chmod 0640 "${_compose_env_tmp}"
+  mv "${_compose_env_tmp}" "${instance_dir}/.compose.env"
 }
 
 generate_compose_file() {
