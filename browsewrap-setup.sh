@@ -3,7 +3,8 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-readonly SCRIPT_NAME="$(basename "$0")"
+SCRIPT_NAME="$(basename "$0")"
+readonly SCRIPT_NAME
 readonly ROOT_DIR="/docker/browsewrap"
 readonly AIBROWSE_ROOT="/docker/aibrowse"
 readonly PORT_MIN=41000
