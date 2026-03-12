@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   build:
@@ -24,6 +26,13 @@ jobs:
           ARCHIVE="browserless-tooling-${VERSION}.tar.gz"
           tar -czf "${ARCHIVE}" aibrowse-setup.sh browsewrap-setup.sh README.md LICENSE
           sha256sum "${ARCHIVE}" > "${ARCHIVE}.sha256"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            browserless-tooling-*.tar.gz
+            browserless-tooling-*.tar.gz.sha256
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
