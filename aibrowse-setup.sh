@@ -3,7 +3,8 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-readonly SCRIPT_NAME="$(basename "$0")"
+SCRIPT_NAME="$(basename "$0")"
+readonly SCRIPT_NAME
 readonly ROOT_DIR="/docker/aibrowse"
 readonly PORT_MIN=20000
 readonly PORT_MAX=39999
@@ -305,7 +306,7 @@ main() {
   local browserless_token
 
   if [[ -f "${instance_dir}/.env" ]]; then
-    # shellcheck disable=SC1090
+    # shellcheck disable=SC1090,SC1091
     source "${instance_dir}/.env"
     browserless_port="${BROWSERLESS_PORT:-}"
     browserless_token="${BROWSERLESS_TOKEN:-}"
