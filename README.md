@@ -1,7 +1,9 @@
 # Browserless Tooling
 
-[![Regression CI](https://github.com/jalsarraf0/browserless-tooling/actions/workflows/regression-security.yml/badge.svg)](https://github.com/jalsarraf0/browserless-tooling/actions/workflows/regression-security.yml)
+[![Regression CI](https://github.com/jalsarraf0/browserless-tooling/actions/workflows/ci.yml/badge.svg)](https://github.com/jalsarraf0/browserless-tooling/actions/workflows/ci.yml)
+[![Regression and Security](https://github.com/jalsarraf0/browserless-tooling/actions/workflows/regression-security.yml/badge.svg)](https://github.com/jalsarraf0/browserless-tooling/actions/workflows/regression-security.yml)
 [![Security CI](https://github.com/jalsarraf0/browserless-tooling/actions/workflows/security.yml/badge.svg)](https://github.com/jalsarraf0/browserless-tooling/actions/workflows/security.yml)
+[![SBOM](https://github.com/jalsarraf0/browserless-tooling/actions/workflows/sbom.yml/badge.svg)](https://github.com/jalsarraf0/browserless-tooling/actions/workflows/sbom.yml)
 
 > Hardened provisioning for Browserless Chromium and LM Studio MCP wrappers,
 > engineered with security-first defaults, deterministic outputs, and bash you
