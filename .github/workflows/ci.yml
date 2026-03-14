@@ -37,6 +37,21 @@ jobs:
         if: matrix.batch == 'static'
         run: bash .github/scripts/docker-runner.sh debian:bookworm-slim "apt-get update && apt-get install -y shellcheck && bash -n aibrowse-setup.sh && bash -n browsewrap-setup.sh && shellcheck -x --exclude=SC2155,SC1091 aibrowse-setup.sh browsewrap-setup.sh"
 
+      - name: Shell formatting check (shfmt)
+        if: matrix.batch == 'static'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          SHFMT_VERSION="3.10.0"
+          curl -fsSL "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_linux_amd64" \
+            -o /tmp/shfmt
+          chmod +x /tmp/shfmt
+          echo "::group::shfmt version"
+          /tmp/shfmt --version
+          echo "::endgroup::"
+          echo "::warning::shfmt check is advisory — failures do not block CI"
+          /tmp/shfmt -d -i 2 -ci -bn aibrowse-setup.sh browsewrap-setup.sh
+
       - name: Full integration regression
         if: matrix.batch == 'integration'
         run: |
