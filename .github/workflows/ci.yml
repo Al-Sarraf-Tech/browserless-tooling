@@ -56,8 +56,8 @@ jobs:
         if: matrix.batch == 'integration'
         run: |
           set -Eeuo pipefail
-          sudo apt-get update
-          sudo apt-get install -y iproute2
+          command -v apt-get &&  sudo apt-get update || sudo dnf -y install iproute
+          command -v apt-get && sudo apt-get install -y iproute2 || true
 
           INSTANCE="ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           SERVICE_HOST="localhost"
