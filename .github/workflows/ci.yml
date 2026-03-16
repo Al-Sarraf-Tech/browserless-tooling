@@ -101,14 +101,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Integration: static-analysis
+      - name: "Integration: static-analysis"
         shell: bash
         timeout-minutes: 30
-        run: echo 'Integration batch: static-analysis'
-      - name: Integration: integration
+        run: |
+          echo 'Integration batch: static-analysis'
+      - name: "Integration: integration"
         shell: bash
         timeout-minutes: 30
-        run: echo 'Integration batch: integration'
+        run: |
+          echo 'Integration batch: integration'
   release:
     name: Release
     runs-on: [self-hosted, unified-all]
