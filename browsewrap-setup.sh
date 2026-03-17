@@ -356,7 +356,7 @@ json.dump(data, sys.stdout, indent=2)
 sys.stdout.write("\n")
 PY
 
-  install -m 0644 /dev/null "${config}"
+  chmod 0644 "${tmp}"
   mv "${tmp}" "${config}"
 }
 
