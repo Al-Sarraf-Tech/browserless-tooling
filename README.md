@@ -139,9 +139,16 @@ Functional validation requires a disposable host with Docker and firewalld:
 
 ```text
 .
-├── aibrowse-setup.sh       # Browserless provisioning script
-├── browsewrap-setup.sh     # MCP wrapper deployment script
-└── AGENTS.md               # Auxiliary documentation for LM Studio agents
+├── aibrowse-setup.sh         # Browserless provisioning script
+├── browsewrap-setup.sh       # MCP wrapper deployment script
+├── ASSURANCE.md              # CI/CD gates, security controls, local validation
+├── CI_CD_HARDENING_REPORT.md # Hardening change log and risk assessment
+├── LICENSE
+└── .github/
+    ├── workflows/
+    │   ├── ci-shell.yml        # Primary CI pipeline (Haskell Orchestrator generated)
+    │   └── orchestrator-scan.yml # Workflow governance scan
+    └── CODEOWNERS
 ```
 
 ---
@@ -149,6 +156,10 @@ Functional validation requires a disposable host with Docker and firewalld:
 ## CI/CD & Orchestration
 
 This project is governed by the [Haskell Orchestrator](https://github.com/Al-Sarraf-Tech/Haskell-Orchestrator) — a Haskell-based multi-agent CI/CD governance framework for pre-push validation, code quality enforcement, and release management across the Al-Sarraf-Tech organization.
+
+The primary pipeline (`ci-shell.yml`) runs seven jobs: `repo-guard` → `lint` / `security` → `test` → `sbom` / `integration` / `release`. All jobs run on self-hosted runners. ShellCheck and shfmt are advisory; Gitleaks is blocking. Releases produce SHA-256 checksums. A separate `orchestrator-scan.yml` workflow validates governance compliance whenever workflow files change.
+
+See [ASSURANCE.md](ASSURANCE.md) for the full security controls, concurrency model, and local validation procedures.
 
 ---
 
@@ -159,12 +170,12 @@ DevOps rigour, security hardening, and developer ergonomics to ship automation
 that can survive production. Looking to extend the stack (metrics ingestion,
 policy tooling, dashboards)? Open an issue or reach out through the repository.
 
-## Validation Status (2026-03-22)
+## Validation Status (2026-04-07)
 
 - Regression status: PASS
 - Commands validated:
   - `bash -n aibrowse-setup.sh browsewrap-setup.sh`
   - `sudo bash ./aibrowse-setup.sh <instance>` + metrics/smoke checks
   - `sudo bash ./browsewrap-setup.sh <instance>` + `/healthz` verification
-- CI/CD status: all tests passed on `main`. Governance `repo-guard` job added to pipeline — verifies repository ownership before all other jobs run.
+- CI/CD status: all jobs passing on `main` (`ci-shell.yml`). Governance `repo-guard` job verifies repository ownership before all other jobs run.
 - Security hygiene: PASS (no hardcoded secrets or private keys detected in tracked files).

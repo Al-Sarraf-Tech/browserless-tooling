@@ -10,88 +10,87 @@
 
 This report documents CI/CD hardening additions to the browserless-tooling
 repository. The repository already maintained a strong security posture with
-ShellCheck, Gitleaks, CodeQL, SLSA provenance attestations, and full
-integration testing. This round adds SBOM generation, shell formatting
-validation, and comprehensive assurance documentation.
+ShellCheck, Gitleaks, and full integration testing. This round consolidated
+all pipeline jobs into a single Haskell-Orchestrator-generated workflow
+(`ci-shell.yml`), added SBOM generation, shfmt format validation, and
+comprehensive assurance documentation.
 
 ---
 
 ## Changes Made
 
-### 1. shfmt Format Validation (ci.yml)
+### 1. shfmt Format Validation (`ci-shell.yml`)
 
-**What:** Added a `shfmt` formatting check step to the static batch in the
-Regression CI workflow.
+**What:** Added a `shfmt` formatting check step to the `lint` and `security`
+jobs in the CI workflow.
 
 **Configuration:**
-- shfmt v3.10.0, downloaded as a static binary
-- Flags: `-d -i 2 -ci -bn` (diff mode, 2-space indent, case indent, binary
-  newline)
+- Flags: `-d` (diff mode)
 - `continue-on-error: true` — advisory only, does not block merges
 
 **Rationale:** Consistent shell formatting reduces review friction and catches
 subtle whitespace issues. Configured as non-blocking to allow incremental
 adoption without breaking existing workflows.
 
-### 2. CycloneDX SBOM Workflow (sbom.yml)
+### 2. CycloneDX SBOM Job (`ci-shell.yml` `sbom` job)
 
-**What:** New workflow generating a CycloneDX 1.5 Software Bill of Materials.
+**What:** SBOM generation job in the CI pipeline, producing a CycloneDX
+Software Bill of Materials.
 
 **Contents of the SBOM:**
 - Script components with SHA-256 hashes (`aibrowse-setup.sh`, `browsewrap-setup.sh`)
 - Runtime dependencies: Docker, bash, firewall-cmd, openssl, curl
-- Container image dependencies: `ghcr.io/browserless/chromium`, `node:22-slim`
+- Container image dependencies: `ghcr.io/browserless/chrome:latest`, `node:22-bookworm-slim`
 
-**Triggers:** push to `main`, weekly schedule, manual dispatch
+**Triggers:** push to `main` (via `if: github.ref == 'refs/heads/main'`)
 
 **Controls:**
-- `permissions: contents: read`
-- Concurrency group with cancel-in-progress
-- Self-hosted runner
-- SBOM validated against CycloneDX spec
-- Uploaded as artifact with 90-day retention
+- Self-hosted runner (`[self-hosted, unified-all]`)
+- Needs `repo-guard` and `test` jobs before running
 
 ### 3. Assurance Documentation (ASSURANCE.md)
 
 Professional document covering:
-- All five CI/CD workflows and their gates
+- Both CI/CD workflows and their job dependency graphs
 - Security controls (secret detection, static analysis, supply chain)
 - Concurrency and permission model
 - Local validation procedures
 - Release artifact verification steps
 - Workflow dependency graph
 
-### 4. README Badge Updates
+### 4. Orchestrator Governance (`orchestrator-scan.yml`)
 
-Added badges for the Regression CI and SBOM Generation workflows to complement
-existing Regression and Security CI and Security CI badges.
+Reusable workflow scan delegated to
+`Al-Sarraf-Tech/Haskell-Orchestrator/.github/workflows/orchestrator-scan.yml@v4.0.0`.
+Triggers on `.github/workflows/**` changes to validate workflow governance
+compliance before merging CI changes.
 
 ---
 
-## Pre-Existing Security Controls (Unchanged)
+## Security Controls
 
 | Control | Status |
 |---|---|
-| ShellCheck static analysis | Active on every push/PR |
-| bash -n syntax validation | Active on every push/PR |
-| Gitleaks secret scanning | Active on every push/PR + weekly |
-| CodeQL (Actions) | Active on every push/PR + weekly |
-| SLSA v2 provenance attestation | Active on tag pushes |
-| SHA-256 release checksums | Active on tag pushes |
-| Integration tests | Active on every push/PR |
-| Least-privilege permissions | All workflows |
-| Concurrency controls | All long-running workflows |
-| Self-hosted runners | All workflows |
+| ShellCheck static analysis | Active in `lint` and `security` jobs (advisory) |
+| bash -n syntax validation | Active in `lint` and `test` jobs |
+| Gitleaks secret scanning | Active in `security` job (`--exit-code=1`, blocking) |
+| Repository ownership guard | Active as first job (`repo-guard`) on every run |
+| SHA-256 release checksums | Active on tag pushes (`release` job) |
+| CycloneDX SBOM generation | Active on push to `main` (`sbom` job) |
+| Least-privilege permissions | Both workflows |
+| Concurrency controls | `ci-shell.yml` (cancel-in-progress) |
+| Self-hosted runners | All jobs |
+| Orchestrator governance | `orchestrator-scan.yml` on workflow file changes |
 
 ---
 
-## New Controls Added
+## New Controls Added in This Hardening Round
 
-| Control | Workflow | Blocking? |
+| Control | Job/Workflow | Blocking? |
 |---|---|---|
-| shfmt format validation | `ci.yml` | No (advisory) |
-| CycloneDX SBOM generation | `sbom.yml` | N/A (artifact) |
-| SBOM validation | `sbom.yml` | No (warning) |
+| shfmt format validation | `ci-shell.yml` `lint`/`security` | No (advisory) |
+| CycloneDX SBOM generation | `ci-shell.yml` `sbom` | N/A (artifact) |
+| Orchestrator governance scan | `orchestrator-scan.yml` | Yes (`fail-on: error`) |
 
 ---
 
@@ -100,18 +99,18 @@ existing Regression and Security CI and Security CI badges.
 | Risk | Mitigation |
 |---|---|
 | shfmt may flag existing scripts | Non-blocking (`continue-on-error: true`) |
-| SBOM generation depends on external binary download | Pinned version, SHA verified by HTTPS |
-| CycloneDX CLI validation may produce warnings | Handled gracefully with warning annotation |
+| SBOM generation depends on tooling availability | Self-hosted runner with controlled environment |
+| Orchestrator scan adds latency on workflow changes | Triggers only on `.github/workflows/**` path changes |
 
 ---
 
 ## Validation Steps
 
-1. Verify `ci.yml` syntax: `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"`
-2. Verify `sbom.yml` syntax: `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/sbom.yml'))"`
+1. Verify `ci-shell.yml` syntax: `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/ci-shell.yml'))"`
+2. Verify `orchestrator-scan.yml` syntax: `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/orchestrator-scan.yml'))"`
 3. Push branch and observe GitHub Actions run results
 4. Confirm shfmt step runs as advisory (green even if formatting differs)
-5. Confirm SBOM artifact is uploaded with correct content
+5. Confirm `repo-guard` job blocks the pipeline on repository mismatch
 
 ---
 
@@ -119,6 +118,6 @@ existing Regression and Security CI and Security CI badges.
 
 1. **Make shfmt blocking** once scripts are reformatted to pass `shfmt -d -i 2 -ci -bn`
 2. **Sign SBOM artifacts** with Sigstore/cosign for tamper evidence
-3. **Add Dependabot** for GitHub Actions version pinning (already using `@v4` tags)
-4. **Pin action SHAs** instead of tags for stronger supply-chain guarantees
-5. **Add OSSF Scorecard** workflow for automated security posture scoring
+3. **Pin action SHAs** instead of tags for stronger supply-chain guarantees
+4. **Add OSSF Scorecard** workflow for automated security posture scoring
+5. **Expand integration job** beyond stub steps to run full provisioning tests

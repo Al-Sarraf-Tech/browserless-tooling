@@ -44,20 +44,18 @@ Delegates to the reusable `orchestrator-scan.yml` workflow in the
 ### Secret Detection
 
 - **Gitleaks** runs on every push and pull request across the full git history.
-- Secrets are redacted in CI output to prevent accidental exposure.
+- Exits with code 1 on any finding to block the pipeline.
 - Weekly scheduled scans catch any secrets introduced between CI runs.
 
 ### Static Analysis
 
-- **ShellCheck** enforces shell scripting best practices with targeted
-  exclusions (`SC2155` for declare-and-assign, `SC1091` for sourced files).
+- **ShellCheck** enforces shell scripting best practices on every push and PR.
 - **bash -n** validates script syntax without execution.
-- **CodeQL** analyzes GitHub Actions workflows for injection vulnerabilities,
-  insecure patterns, and misconfigurations.
 
 ### Supply Chain
 
-- **CycloneDX SBOM** documents all script components and runtime dependencies.
+- **CycloneDX SBOM** documents all script components and runtime dependencies,
+  generated on every push to `main`.
 - **SHA-256 checksums** (`SHA256SUMS`) accompany every release tarball.
 - All CI runs on **self-hosted runners** with controlled environments.
 
@@ -99,7 +97,7 @@ shellcheck -x --exclude=SC2155,SC1091 aibrowse-setup.sh browsewrap-setup.sh
 shfmt -d -i 2 -ci -bn aibrowse-setup.sh browsewrap-setup.sh
 
 # Secret scan (requires gitleaks installed)
-gitleaks detect --source . --redact --verbose
+gitleaks detect --source . --no-banner --exit-code=1
 
 # Full integration test (requires root, Docker, firewalld)
 INSTANCE="local-test-$(date +%s)"
@@ -120,8 +118,7 @@ After downloading a release:
 
 ```bash
 # Verify checksum
-sha256sum -c browserless-tooling-v*.tar.gz.sha256
-
+sha256sum -c SHA256SUMS
 ```
 
 ---
@@ -129,13 +126,18 @@ sha256sum -c browserless-tooling-v*.tar.gz.sha256
 ## Workflow Dependency Graph
 
 ```text
-push/PR to main ──┬── ci.yml (static + integration)
-                   ├── regression-security.yml (multi-lang + gitleaks)
-                   ├── security.yml (gitleaks + shellcheck + CodeQL)
-                   └── sbom.yml (CycloneDX SBOM)
+push/PR to main ─────── ci-shell.yml
+                           repo-guard
+                           └── lint
+                               ├── test ──── sbom (main only)
+                               │         └── integration
+                               └── security
 
-tag push (v*) ──── release.yml (bundle + SHA-256)
+tag push (v*) ──────── ci-shell.yml release job
+                        (needs: repo-guard, test, security)
 
-weekly schedule ─┬─ security.yml (scheduled secret scan)
-                 └─ sbom.yml (scheduled SBOM refresh)
+workflow file change ── orchestrator-scan.yml
+                        (Haskell Orchestrator governance)
+
+weekly schedule ──────── ci-shell.yml (full pipeline)
 ```
