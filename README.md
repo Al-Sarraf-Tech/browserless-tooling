@@ -1,6 +1,6 @@
 # Browserless Tooling
 
-[![Regression CI](https://github.com/jalsarraf0/browserless-tooling/actions/workflows/ci.yml/badge.svg)](https://github.com/jalsarraf0/browserless-tooling/actions/workflows/ci.yml)
+[![Regression CI](https://github.com/Al-Sarraf-Tech/browserless-tooling/actions/workflows/ci-shell.yml/badge.svg)](https://github.com/Al-Sarraf-Tech/browserless-tooling/actions/workflows/ci-shell.yml)
 
 > CI runs on self-hosted runners governed by the [Haskell Orchestrator](https://github.com/Al-Sarraf-Tech/Haskell-Orchestrator). Pipeline includes a governance `repo-guard` job that verifies repository ownership before all other jobs run.
 
