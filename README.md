@@ -2,7 +2,7 @@
 
 [![Regression CI](https://github.com/jalsarraf0/browserless-tooling/actions/workflows/ci.yml/badge.svg)](https://github.com/jalsarraf0/browserless-tooling/actions/workflows/ci.yml)
 
-> CI runs on self-hosted runners managed by [haskell-ci-orchestrator](https://github.com/jalsarraf0/haskell-ci-orchestrator).
+> CI runs on self-hosted runners governed by the [Haskell Orchestrator](https://github.com/Al-Sarraf-Tech/Haskell-Orchestrator). Pipeline includes a governance `repo-guard` job that verifies repository ownership before all other jobs run.
 
 > Hardened provisioning for Browserless Chromium and LM Studio MCP wrappers,
 > engineered with security-first defaults, deterministic outputs, and bash you
@@ -146,6 +146,12 @@ Functional validation requires a disposable host with Docker and firewalld:
 
 ---
 
+## CI/CD & Orchestration
+
+This project is governed by the [Haskell Orchestrator](https://github.com/Al-Sarraf-Tech/Haskell-Orchestrator) — a Haskell-based multi-agent CI/CD governance framework for pre-push validation, code quality enforcement, and release management across the Al-Sarraf-Tech organization.
+
+---
+
 ## Maintainers
 
 Crafted and maintained by the Browserless Tooling contributors — blending
@@ -153,12 +159,12 @@ DevOps rigour, security hardening, and developer ergonomics to ship automation
 that can survive production. Looking to extend the stack (metrics ingestion,
 policy tooling, dashboards)? Open an issue or reach out through the repository.
 
-## Validation Status (2026-03-03)
+## Validation Status (2026-03-22)
 
 - Regression status: PASS
 - Commands validated:
   - `bash -n aibrowse-setup.sh browsewrap-setup.sh`
   - `sudo bash ./aibrowse-setup.sh <instance>` + metrics/smoke checks
   - `sudo bash ./browsewrap-setup.sh <instance>` + `/healthz` verification
-- CI/CD status: all tests passed on `main` (`Regression CI` run `22643543967`, `Security CI` run `22643543949`, `Regression and Security` run `22643543984`).
+- CI/CD status: all tests passed on `main`. Governance `repo-guard` job added to pipeline — verifies repository ownership before all other jobs run.
 - Security hygiene: PASS (no hardcoded secrets or private keys detected in tracked files).
