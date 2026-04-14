@@ -1,181 +1,209 @@
 # Browserless Tooling
 
 [![Regression CI](https://github.com/Al-Sarraf-Tech/browserless-tooling/actions/workflows/ci-shell.yml/badge.svg)](https://github.com/Al-Sarraf-Tech/browserless-tooling/actions/workflows/ci-shell.yml)
-
-> CI runs on self-hosted runners governed by the [Haskell Orchestrator](https://github.com/Al-Sarraf-Tech/Haskell-Orchestrator). Pipeline includes a governance `repo-guard` job that verifies repository ownership before all other jobs run.
-
-> Hardened provisioning for Browserless Chromium and LM Studio MCP wrappers,
-> engineered with security-first defaults, deterministic outputs, and bash you
-> can hand to an SRE.
-
+![](https://img.shields.io/badge/release-v1.0.1-0a0a0a?style=flat-square&labelColor=353535)
 ![](https://img.shields.io/badge/bash-set%20-Eeuo%20pipefail-0a0a0a?style=flat-square&labelColor=353535)
 ![](https://img.shields.io/badge/security-firewall__aware-0a0a0a?style=flat-square&labelColor=353535)
 ![](https://img.shields.io/badge/automation-idempotent-0a0a0a?style=flat-square&labelColor=353535)
 
----
+> CI runs on self-hosted runners governed by the [Haskell Orchestrator](https://github.com/Al-Sarraf-Tech/Haskell-Orchestrator). A `repo-guard` job verifies repository ownership before all other pipeline jobs run.
 
-## Why This Exists
-
-Provisioning Browserless is easy; operating it safely on a real network is not.
-This toolkit codifies the opinionated runbook I use for client deployments:
-
-- bootstrap a hardened Browserless Chromium instance in minutes,
-- layer a Node 22 MCP wrapper with host networking and observability, and
-- keep credentials and firewall rules in lock-step without manual drift.
-
-The scripts are meant to be read, audited, and trusted — not treated as a black
-box.
+Hardened provisioning scripts for [Browserless](https://www.browserless.io/) Chromium and an LM Studio MCP wrapper. Security-first defaults, deterministic outputs, idempotent execution.
 
 ---
 
-## TL;DR Provisioning Flow
+## What It Does
+
+Two scripts form a two-tier stack:
+
+1. **`aibrowse-setup.sh`** provisions a Browserless Chromium Docker container with a randomly selected high-range port, a generated token, persistent volumes, firewall rules, and a smoke-test screenshot.
+2. **`browsewrap-setup.sh`** deploys a lightweight Node 22 MCP wrapper container that bridges LM Studio to the Browserless instance and registers itself in `~/mcp.json`.
+
+Both scripts are idempotent: rerunning against an existing instance reuses the stored credentials and reconfigures the stack without generating new secrets or ports.
+
+---
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  Step 1 — aibrowse-setup.sh <instance>                   │
+│                                                          │
+│  dependency guard → port collision check (20k–39k range) │
+│  → openssl token gen → .env / .compose.env (0640)        │
+│  → docker-compose.yml → docker compose up                │
+│  → health poll (metrics endpoint, 90 attempts × 2s)      │
+│  → smoke-test screenshot (POST /chrome/screenshot)        │
+│  → firewalld rule (trusted zone, IPv4 + IPv6)            │
+│                                                          │
+│  Artifacts: /docker/aibrowse/<instance>/                 │
+│    .env  .compose.env  docker-compose.yml                │
+│    profiles/  downloads/  logs/  client_examples/        │
+└──────────────────────────┬───────────────────────────────┘
+                           │ reads .env
+┌──────────────────────────▼───────────────────────────────┐
+│  Step 2 — browsewrap-setup.sh <instance>                 │
+│                                                          │
+│  dependency guard → load Browserless secrets             │
+│  → port collision check (41k–58k range)                  │
+│  → generate Node 22 app (Dockerfile + server.mjs)        │
+│  → docker compose build --pull + up                      │
+│  → health poll (/healthz, 30 attempts × 2s)              │
+│  → update ~/mcp.json (upsert browsewrap-<instance>)      │
+│  → firewalld rule (trusted zone)                         │
+│                                                          │
+│  Artifacts: /docker/browsewrap/<instance>/               │
+│    .env  .compose.env  docker-compose.yml                │
+│    app/  (Dockerfile + src/server.mjs)  logs/            │
+└──────────────────────────────────────────────────────────┘
+```
+
+### MCP Wrapper
+
+`server.mjs` is a minimal Node.js HTTP server that exposes:
+
+- `GET /healthz` — returns `{"status":"ok","browserless_endpoint":"...","uptime_seconds":N}`
+- All other paths return `404`
+
+On startup the wrapper appends to `logs/wrapper.log`. `~/mcp.json` is updated with an entry keyed by `browsewrap-<instance>` pointing to the wrapper's port and the Browserless token. LM Studio reads this file to discover the connector.
+
+### Security Posture
+
+| Control | Implementation |
+|---|---|
+| Token generation | `openssl rand -hex 24` at first run; reused on subsequent runs |
+| Credential storage | `.env` files at `0640`; never committed, never logged |
+| Firewall | `firewall-cmd --permanent --zone=trusted --add-port=<port>/tcp`; skipped gracefully if firewalld absent or inactive |
+| Port selection | Random from safe ranges; checked against both `ss` (local processes) and `docker ps` (containers) before assignment |
+| Container logging | `json-file` driver, 10 MB max, 5 file rotation |
+
+---
+
+## Prerequisites
+
+- Linux host with Docker (Compose plugin or standalone `docker-compose`)
+- `openssl`, `curl`, `ss` (`iproute2`)
+- `python3` (for `browsewrap-setup.sh` MCP config update)
+- `firewall-cmd` (optional; firewall configuration skipped if absent)
+- Root or `sudo` access
+
+---
+
+## Usage
 
 ```bash
-# 1. Hardened Browserless bring-up
-sudo bash aibrowse-setup.sh demo
+# Step 1 — provision Browserless Chromium
+sudo bash aibrowse-setup.sh <instance-name>
 
-# 2. Sanity check the service
-curl -fsS http://localhost:<port>/metrics?token=<token>
+# Verify: metrics endpoint
+curl -fsS "http://localhost:<port>/metrics?token=<token>"
+# Verify: smoke-test screenshot (>10 KB)
+ls -lh /docker/aibrowse/<instance-name>/downloads/smoke-test.png
 
-# 3. Add the MCP wrapper tier
-sudo bash browsewrap-setup.sh demo
+# Step 2 — deploy MCP wrapper
+sudo bash browsewrap-setup.sh <instance-name>
+
+# Verify: wrapper health
+curl -fsS "http://localhost:<wrapper-port>/healthz"
+# Verify: LM Studio connector registered
+cat ~/mcp.json
 ```
 
-Look for `/docker/aibrowse/demo/downloads/smoke-test.png` (>10 KB) and the
-wrapper’s `/healthz` payload in `/docker/browsewrap/demo/logs/wrapper.log`.
+Instance names must be lowercase alphanumeric with optional dashes or underscores (`[a-z0-9][a-z0-9_-]{0,62}`).
 
----
-
-## What You Get
-
-| Script | Role | Key Moves |
-| --- | --- | --- |
-| `aibrowse-setup.sh` | Boots Browserless Chromium with persistent profiles, downloads, logs, and client samples. | Idempotent `.env`/`.compose.env` generation, random high-port selection, docker health gating, smoke-test screenshot, adaptive firewalld policy, Playwright CDP example. |
-| `browsewrap-setup.sh` | Deploys the MCP wrapper Node app for LM Studio, tailors logging, and updates `~/mcp.json`. | Reuses Browserless secrets, scaffolds production Node 22 app, composes host networking, hydrates wrapper logs, emits readiness checks, exposes `/healthz`. |
-
----
-
-## Operating Playbook
-
-```text
-┌─────────────────────┐    ┌────────────────────────┐
-│  aibrowse-setup.sh  │    │  browsewrap-setup.sh   │
-│  (root required)    │    │  (depends on Browserless) │
-├─────────────────────┤    ├────────────────────────┤
-│ • dependency guard  │    │ • dependency guard      │
-│ • env + compose     │    │ • wrapper env           │
-│ • docker compose up │    │ • npm install / build   │
-│ • health & smoke    │    │ • docker compose up     │
-│ • firewalld rules   │    │ • health assertions     │
-└─────────┬───────────┘    └────────────┬───────────┘
-          │                             │
-          ▼                             ▼
-   `/docker/aibrowse/<name>`     `/docker/browsewrap/<name>`
-```
-
-- Treat everything under `/docker/*/<name>` as script-owned infrastructure.
-  Regenerate by rerunning the scripts; never hand-edit the files.
-- Both scripts surface colorised logging via the shared `log` helpers for fast
-  SRE-ready troubleshooting.
-- Port allocation stays in safe ranges (20k–39k for Browserless, 41k–58k for
-  wrappers) with collision detection for local processes **and** containers.
-
----
-
-## Observability & Verification
-
-- `sudo docker ps --filter name=browserless`
-- `sudo docker logs browserless --tail 50`
-- `sudo docker ps --filter name=browsewrap`
-- `sudo docker logs browsewrap-<name> --tail 50`
-- Watch `~/mcp.json` for the connector payload emitted by `browsewrap-setup.sh`.
-- Regenerated smoke-test screenshot lives at
-  `/docker/aibrowse/<name>/downloads/smoke-test.png`.
-
----
-
-## Validation Matrix
+**Re-provision an existing instance** (e.g., after a host reboot):
 
 ```bash
-shellcheck aibrowse-setup.sh browsewrap-setup.sh
-bash -n aibrowse-setup.sh
-bash -n browsewrap-setup.sh
+sudo bash aibrowse-setup.sh <instance-name>   # reuses existing .env
+sudo bash browsewrap-setup.sh <instance-name> # reuses existing .env
 ```
 
-Functional validation requires a disposable host with Docker and firewalld:
+**Playwright CDP example** is scaffolded at:
 
-1. Run both scripts as outlined above.
-2. Hit the Browserless metrics endpoint with the emitted token.
-3. Confirm `/healthz` from the wrapper and a >10 KB `smoke-test.png`.
-
----
-
-## Security Posture
-
-- `BROWSERLESS_TOKEN` is generated with `openssl rand -hex 24` and stored with
-  `0640` permissions in both `.env` files.
-- Firewalld rules restrict Browserless exposure by defaulting to trusted zones,
-  adding explicit drop rules for everything else.
-- Docker volumes bind to `/docker` paths with controlled ownership for the
-  Chromium profile and download artifacts.
-- No secrets leave the host; publication happens through the Playwright sample,
-  not raw token disclosure.
+```
+/docker/aibrowse/<instance-name>/client_examples/playwright_connect.py
+```
 
 ---
 
-## Crafted Skillset
+## Observability
 
-- Bash that embraces `set -Eeuo pipefail`, rigorous guard clauses, and graceful
-  error handling.
-- Deterministic file generation via here-docs, avoiding permission drift.
-- Dynamic firewall choreography (IPv4 + IPv6) aware of local zones.
-- Observability baked in: health checks, log capture, and post-run summaries.
-- Secure automation patterns drawn from production rollouts and incident
-  postmortems.
+```bash
+# Browserless container status and logs
+sudo docker ps --filter name=browserless-<instance>
+sudo docker logs browserless-<instance> --tail 50
+
+# MCP wrapper status and logs
+sudo docker ps --filter name=browsewrap-<instance>
+sudo docker logs browsewrap-<instance> --tail 50
+cat /docker/browsewrap/<instance>/logs/wrapper.log
+
+# Smoke-test artifact
+ls -lh /docker/aibrowse/<instance>/downloads/smoke-test.png
+```
+
+---
+
+## Local Validation
+
+```bash
+# Syntax check
+bash -n aibrowse-setup.sh browsewrap-setup.sh
+
+# ShellCheck lint
+shellcheck -x --exclude=SC2155,SC1091 aibrowse-setup.sh browsewrap-setup.sh
+
+# shfmt format check (advisory)
+shfmt -d -i 2 -ci -bn aibrowse-setup.sh browsewrap-setup.sh
+
+# Secret scan
+gitleaks detect --source . --no-banner --exit-code=1
+
+# Full integration test (requires root, Docker, firewalld)
+INSTANCE="local-test-$(date +%s)"
+sudo bash ./aibrowse-setup.sh "${INSTANCE}"
+sudo bash ./browsewrap-setup.sh "${INSTANCE}"
+# Cleanup
+sudo docker rm -f "browserless-${INSTANCE}" "browsewrap-${INSTANCE}"
+sudo rm -rf "/docker/aibrowse/${INSTANCE}" "/docker/browsewrap/${INSTANCE}"
+```
+
+---
+
+## CI/CD
+
+Governed by the [Haskell Orchestrator](https://github.com/Al-Sarraf-Tech/Haskell-Orchestrator). All jobs run on self-hosted runners.
+
+**`ci-shell.yml`** — triggers on push to `main`, version tags, pull requests, weekly schedule (Monday 04:00 UTC), and manual dispatch.
+
+```
+repo-guard
+├── lint       bash -n, ShellCheck (advisory), shfmt (advisory)
+│   ├── test   bash -n validation
+│   │   ├── sbom         CycloneDX SBOM (main branch only)
+│   │   └── integration  static analysis stubs
+│   └── security   Gitleaks (blocking), ShellCheck (advisory)
+│       └── release    SHA-256 checksums + GitHub Release (tag pushes only)
+```
+
+**`orchestrator-scan.yml`** — triggers on workflow file changes; delegates to the Haskell Orchestrator reusable workflow (`@v4.0.0`, `fail-on: error`) for governance validation.
+
+See [ASSURANCE.md](ASSURANCE.md) for full security controls, concurrency model, and release artifact verification.
 
 ---
 
 ## Repository Map
 
-```text
+```
 .
-├── aibrowse-setup.sh         # Browserless provisioning script
-├── browsewrap-setup.sh       # MCP wrapper deployment script
+├── aibrowse-setup.sh         # Browserless Chromium provisioning
+├── browsewrap-setup.sh       # LM Studio MCP wrapper deployment
 ├── ASSURANCE.md              # CI/CD gates, security controls, local validation
 ├── CI_CD_HARDENING_REPORT.md # Hardening change log and risk assessment
 ├── LICENSE
 └── .github/
     ├── workflows/
-    │   ├── ci-shell.yml        # Primary CI pipeline (Haskell Orchestrator generated)
+    │   ├── ci-shell.yml          # Primary CI pipeline
     │   └── orchestrator-scan.yml # Workflow governance scan
     └── CODEOWNERS
 ```
-
----
-
-## CI/CD & Orchestration
-
-This project is governed by the [Haskell Orchestrator](https://github.com/Al-Sarraf-Tech/Haskell-Orchestrator) — a Haskell-based multi-agent CI/CD governance framework for pre-push validation, code quality enforcement, and release management across the Al-Sarraf-Tech organization.
-
-The primary pipeline (`ci-shell.yml`) runs seven jobs: `repo-guard` → `lint` / `security` → `test` → `sbom` / `integration` / `release`. All jobs run on self-hosted runners. ShellCheck and shfmt are advisory; Gitleaks is blocking. Releases produce SHA-256 checksums. A separate `orchestrator-scan.yml` workflow validates governance compliance whenever workflow files change.
-
-See [ASSURANCE.md](ASSURANCE.md) for the full security controls, concurrency model, and local validation procedures.
-
----
-
-## Maintainers
-
-Crafted and maintained by the Browserless Tooling contributors — blending
-DevOps rigour, security hardening, and developer ergonomics to ship automation
-that can survive production. Looking to extend the stack (metrics ingestion,
-policy tooling, dashboards)? Open an issue or reach out through the repository.
-
-## Validation Status (2026-04-07)
-
-- Regression status: PASS
-- Commands validated:
-  - `bash -n aibrowse-setup.sh browsewrap-setup.sh`
-  - `sudo bash ./aibrowse-setup.sh <instance>` + metrics/smoke checks
-  - `sudo bash ./browsewrap-setup.sh <instance>` + `/healthz` verification
-- CI/CD status: all jobs passing on `main` (`ci-shell.yml`). Governance `repo-guard` job verifies repository ownership before all other jobs run.
-- Security hygiene: PASS (no hardcoded secrets or private keys detected in tracked files).
